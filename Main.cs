@@ -827,7 +827,7 @@ namespace BrainBot
 				short food = readShortFromPacket (ref packet);
 				float saturation = readFloatFromPacket (ref packet);
 				Console.WriteLine ("Update health:{0} food:{1} saturation:{2}", health, food, saturation);
-				if (health < 0 ) {
+				if (health <= 0 ) {
 					//isLogged = false;
 					byte[] r = new byte[0];
 					r = addByteToPacket (r, 0x09);
