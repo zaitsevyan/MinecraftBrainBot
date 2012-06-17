@@ -1,5 +1,6 @@
-!moveTo x y z 11:06
-!look yaw pitch 11:06
-!player onGround <- я так и не понял как это работает 11:06
-!startMoving !stopMoving 11:06
+!moveTo x y z
+!look yaw pitch
+!player onGround <- я так и не понял как это работает
+!startMoving 
+!stopMoving
 все остальное отправляется в игровой чат
