@@ -23,9 +23,9 @@ namespace BrainBot
 		double posZ = 0;
 		int posIndex = 0;
 		double speed = 0;
-		double[] sx = new double[4]{102,103,104,105};
-		double[] sy = new double[4]{135,136,135,136};
-		double[] sz = new double[4]{99,99,99,99};
+		double[] sx = new double[4]{103,103,100,100};
+		double[] sy = new double[4]{135,135,135,135};
+		double[] sz = new double[4]{100,97,97,100};
 		bool isLogged = false;
 		System.Timers.Timer posTimer = null;
 		public static void Main (string[] args)
@@ -128,7 +128,7 @@ namespace BrainBot
 						posTimer.Stop ();
 					posTimer = new System.Timers.Timer ();
 					posTimer.Elapsed += new ElapsedEventHandler (DisplayTimeEvent);
-					posTimer.Interval = 100;
+					posTimer.Interval = 500;
 					posTimer.Start ();
 				}
 				if (lines [0] == "!stopMoving") {
