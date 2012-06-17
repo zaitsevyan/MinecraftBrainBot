@@ -27,6 +27,7 @@ namespace BrainBot
 		double[] sy = new double[4]{135,136,135,136};
 		double[] sz = new double[4]{99,99,99,99};
 		bool isLogged = false;
+		System.Timers.Timer posTimer = null;
 		public static void Main (string[] args)
 		{
 			MainClass BrainBot = new MainClass ();
@@ -35,6 +36,7 @@ namespace BrainBot
 					BrainBot.Connect ();
 					BrainBot.client.Close ();
 					BrainBot.client = null;
+					BrainBot.posTimer = null;
 				}
 			}
 		}
@@ -120,6 +122,18 @@ namespace BrainBot
 					sendMessage = addFloatToPacket (sendMessage, yaw);
 					sendMessage = addFloatToPacket (sendMessage, pitch);
 					sendMessage = addByteToPacket (sendMessage, 0x00);
+				}
+				if (lines [0] == "!startMoving") {
+					if (posTimer != null)
+						posTimer.Stop ();
+					posTimer = new System.Timers.Timer ();
+					posTimer.Elapsed += new ElapsedEventHandler (DisplayTimeEvent);
+					posTimer.Interval = 100;
+					posTimer.Start ();
+				}
+				if (lines [0] == "!stopMoving") {
+					if (posTimer != null)
+						posTimer.Stop ();
 				}
 			} else {
 				sendMessage = addByteToPacket (sendMessage, 0x03);
@@ -469,10 +483,6 @@ namespace BrainBot
 			packet = addByteToPacket (packet, 0x00);
 			packet = addByteToPacket (packet, 0x00);			
 			SendPacket (packet);
-			System.Timers.Timer scenario = new System.Timers.Timer ();
-			scenario.Elapsed += new ElapsedEventHandler (DisplayTimeEvent);
-			scenario.Interval = 100;
-			scenario.Start();
 			while (next) {
 				response = new byte[4096];
 				result = ReceivePacket (response);
