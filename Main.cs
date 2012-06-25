@@ -12,7 +12,18 @@ namespace BrainBot
 		{
 			Minecraft m = new Minecraft ("main.ttyh.ru", 25565);
 			m.Status ();
-			m.Start("HypnoToad");
+			Thread connection = new Thread (new ThreadStart (delegate {
+				m.Start ("HypnoToad");
+			}
+			)
+			);
+			connection.Start ();
+			while (!m.isLogged)
+				Thread.Sleep (100);
+			while (m.isLogged) {
+				string command = Console.ReadLine ();
+				m.writeToChat (command);
+			}
 		}
 	}
 }

@@ -28,8 +28,9 @@ namespace BrainBot
 		public Dictionary<int,Entity> entities;
 		public long time;
 		public List<Chunk> map;
-		public List<PlayerListItem> playerList;
+		public Dictionary<string,short> playerList;
 		public short worldHeight = 256;
+		public bool isLogged;
 		public Minecraft (string server, ushort port)
 		{
 			this.server = server;
@@ -43,7 +44,8 @@ namespace BrainBot
 			entities = new Dictionary<int, Entity> ();
 			map = new List<Chunk> ();
 			time = 0;
-			playerList = new List<PlayerListItem> ();
+			playerList = new Dictionary<string, short> ();
+			isLogged = false;
 		}
 		public void Status ()
 		{
@@ -73,6 +75,15 @@ namespace BrainBot
 		{
 			this.connectName = name;
 			this.EnterGame ();	
+		}
+		public void writeToChat (string message)
+		{
+			string part = "";
+			while (message.Length>0) {
+				part = message.Substring (0, Math.Min(message.Length,100));
+				message = message.Remove (0, part.Length);
+				this.SendPacket (new object[]{(byte)PacketID.ChatMessage,part});
+			}
 		}
 		private string clearString (string text)
 		{
@@ -125,7 +136,7 @@ namespace BrainBot
 				case PacketID.LoginRequest:
 					this.player = new Player (this.connectName, this);
 					this.player.entityID = readInt ();
-					entities.Add (this.player.entityID, this.player);
+					entities[this.player.entityID]=this.player;
 					readString ();
 					this.levelType = readString ();
 					this.serverMode = (ServerMode)readInt ();
@@ -144,6 +155,7 @@ namespace BrainBot
 					string serverAnswer = readString ();
 					Console.WriteLine ("Dissconnected: {0}", serverAnswer);
 					isConnected = false;
+					isLogged = false;
 					break;
 				case PacketID.KeepAlive:
 					this.SendPacket (new object[]{(byte)PacketID.KeepAlive,readInt ()});
@@ -201,6 +213,7 @@ namespace BrainBot
 						this.player.position.y + this.player.height,
 						this.player.position.z,this.player.look.yaw,this.player.look.pitch,this.player.onGround}
 					);
+					isLogged = true;
 					break;
 				case PacketID.Player:
 					this.player.onGround = readBool ();
@@ -228,7 +241,7 @@ namespace BrainBot
 					picture.centerPosition.y = readInt ();
 					picture.centerPosition.z = readInt ();
 					picture.direction = readInt ();
-					this.entities.Add (picture.entityID, picture);
+					this.entities[picture.entityID]=picture;
 				//Console.WriteLine ("Spawn Painting: {4} X:{0} Y:{1} Z:{2} Direction:{3}", x2, y2, z2, direction, title);
 					break;
 				case PacketID.EntityHeadLook:
@@ -250,7 +263,7 @@ namespace BrainBot
 					mob.look.pitch = readByte ();
 					mob.headYaw = readByte ();
 					mob.metadata = readMetadata ();
-					entities.Add (mob.entityID, mob);
+					entities[mob.entityID]= mob;
 				/*Console.WriteLine (
 					"Spawn Mob: Type:{0} X:{1} Y:{2} Z:{3} Yaw:{4} Pitch:{5} Head Yaw:{6} Metadate size:{7}",
 					type,
@@ -283,7 +296,7 @@ namespace BrainBot
 						p.look.yaw = readByte ();
 						p.look.pitch = readByte ();
 						p.currentItem = readShort ();
-						entities.Add (p.entityID, p);
+						entities[p.entityID]=p;
 						Console.WriteLine (
 						"Player spawned: {3} X:{0} Y:{1} Z:{2} yaw:{4} pitch:{5} withItem:{6}",
 						p.position.x,
@@ -305,7 +318,7 @@ namespace BrainBot
 							armor.slot = readShort ();
 							armor.itemID = readShort ();
 							armor.damage = readShort ();
-							p.armor.Add (armor.slot, armor);
+							p.armor[armor.slot]=armor;
 							Console.WriteLine ("Equipment: slot:{0} itemID:{1} damage:{2}", armor.slot, armor.itemID, armor.damage);
 						}
 					}
@@ -323,7 +336,7 @@ namespace BrainBot
 					item.rotation = readByte ();
 					item.pitch = readByte ();
 					item.roll = readByte ();
-					entities.Add (item.entityID, item);
+					entities[item.entityID]=item;
 					Console.WriteLine (
 						"Dropped item: item:{0}:{2} count:{1} x:{3} y:{4} z:{5} rotation:{6} pitch:{7} roll:{8}",
 					item.item,
@@ -358,20 +371,15 @@ namespace BrainBot
 				//Console.WriteLine ("Need to {0} the chunk X:{1} Y{2}", mode ? "initialize" : "unload", x6, y6);
 					break;
 				case PacketID.PlayerListItem:
-					PlayerListItem playerItem = new PlayerListItem ();
-					playerItem.name = clearString (readString ());
+					string name = clearString (readString ());
 					bool online = readBool ();
-					playerItem.ping = readShort ();
+					short ping = readShort ();
 					if (online) {
-						playerList.Add (playerItem);
+						playerList[name]= ping;
 					} else {
-						playerList.Remove (playerList.Find (delegate(PlayerListItem pli) {
-							return pli.name == playerItem.name;
-						}
-						)
-						);
+						playerList.Remove (name);
 					}
-					Console.WriteLine ("Player:{0} ping:{1} {2} game", playerItem.name, playerItem.ping, online ? "enter" : "exit");
+					Console.WriteLine ("Player:{0} ping:{1} {2} game", name, ping, online ? "enter" : "exit");
 					break;
 				case PacketID.SetWindowItems:
 					byte windowId = readByte ();
@@ -515,7 +523,7 @@ namespace BrainBot
 					Console.WriteLine ("Someone pick up items");
 					break;
 				case PacketID.Entity:
-					entities.Add (readInt (), new Entity ());
+					entities[readInt ()] = new Entity ();
 					break;
 				case PacketID.AttachEntity:
 					readInt ();
@@ -681,24 +689,26 @@ namespace BrainBot
 		{
 			if (!isConnected)
 				return;
-			List<byte> packet = new List<byte> ();
-			foreach (object command in commands) {
-				if (command.GetType () == typeof(byte))
-					write (packet, (byte)command);
-				else if (command.GetType () == typeof(int))
-					write (packet, (int)command);
-				else if (command.GetType () == typeof(short))
-					write (packet, (short)command);
-				else if (command.GetType () == typeof(string))
-					write (packet, (string)command);
-				else if (command.GetType () == typeof(double))
-					write (packet, (double)command);
-				else if (command.GetType () == typeof(float))
-					write (packet, (float)command);
-				else if(command.GetType()==typeof(bool))
-					write(packet,(byte)(((bool)command)?0x01:0x00));
+			lock (this.client) {
+				List<byte> packet = new List<byte> ();
+				foreach (object command in commands) {
+					if (command.GetType () == typeof(byte))
+						write (packet, (byte)command);
+					else if (command.GetType () == typeof(int))
+						write (packet, (int)command);
+					else if (command.GetType () == typeof(short))
+						write (packet, (short)command);
+					else if (command.GetType () == typeof(string))
+						write (packet, (string)command);
+					else if (command.GetType () == typeof(double))
+						write (packet, (double)command);
+					else if (command.GetType () == typeof(float))
+						write (packet, (float)command);
+					else if (command.GetType () == typeof(bool))
+						write (packet, (byte)(((bool)command) ? 0x01 : 0x00));
+				}
+				this.client.Send (packet.ToArray ());
 			}
-			this.client.Send (packet.ToArray());
 		}
 		private void write (List<byte> result, byte value)
 		{
