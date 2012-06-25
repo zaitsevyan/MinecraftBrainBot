@@ -11,6 +11,7 @@ namespace BrainBot
 		public static void Main (string[] args)
 		{
 			Minecraft m = new Minecraft ("main.ttyh.ru", 25565);
+			m.Status ();
 			m.Start("HypnoToad");
 		}
 	}

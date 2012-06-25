@@ -18,6 +18,18 @@ namespace BrainBot
 		private Socket client;
 		private bool isConnected;
 		private List<byte> stream;
+		public string levelType{ get; private set;}
+		public ServerMode serverMode;
+		public Dimension dimension;
+		public Difficulty difficulty;
+		public byte maxPlayers;
+		public XYZ<int> spawnPosition;
+		public List<string> chat;
+		public Dictionary<int,Entity> entities;
+		public long time;
+		public List<Chunk> map;
+		public List<PlayerListItem> playerList;
+		public short worldHeight = 256;
 		public Minecraft (string server, ushort port)
 		{
 			this.server = server;
@@ -25,14 +37,15 @@ namespace BrainBot
 			this.connectName = "Player";
 			this.connectHash = "-";
 			isConnected = false;
-			stream = new List<byte> ();		
+			maxPlayers = 0;
+			stream = new List<byte> ();
+			chat = new List<string> ();
+			entities = new Dictionary<int, Entity> ();
+			map = new List<Chunk> ();
+			time = 0;
+			playerList = new List<PlayerListItem> ();
 		}
-		public void Start (string name)
-		{
-			this.connectName = name;
-			this.connect ();	
-		}
-		private void connect ()
+		public void Status ()
 		{
 			IPAddress ip = Dns.GetHostAddresses (this.server) [0];
 			client = new Socket (AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
@@ -42,12 +55,34 @@ namespace BrainBot
 			PacketID packetID = (PacketID)readByte ();
 			client.Close ();
 			isConnected = false;
-			if (packetID == PacketID.DisconnectKick) {
+			if(packetID==PacketID.DisconnectKick)
+			{
 				string status = readString ();
 				string[] parts = status.Split ('§');
-				Console.WriteLine ("{0}:{1} {2} {3}/{4}", this.server, this.port, parts [0], parts [1], parts [2] == "0" ? "???" : parts [2]);
-				this.EnterGame ();
+				Console.WriteLine (
+					"{0}:{1} {2} {3}/{4}",
+					this.server,
+					this.port,
+					parts [0],
+					parts [1],
+					parts [2] == "0" ? "???" : parts [2]
+				);
 			}
+		}
+		public void Start (string name)
+		{
+			this.connectName = name;
+			this.EnterGame ();	
+		}
+		private string clearString (string text)
+		{
+			string result = "";
+			for (int i =0; i<text.Length; i++)
+				if (text [i] == '§')
+					i++;
+				else
+					result += text [i];
+			return result;
 		}
 		private void EnterGame ()
 		{
@@ -83,111 +118,139 @@ namespace BrainBot
 			PacketID packetID;
 			while (isConnected) {
 				packetID = (PacketID)readByte ();
-				switch ((byte)packetID) {
-				case 0x01:
-					int EntityId = readInt ();
+				double stance;
+				int entityID = 0;
+				//Console.WriteLine (Enum.GetName(typeof(PacketID),packetID));
+				switch (packetID) {
+				case PacketID.LoginRequest:
+					this.player = new Player (this.connectName, this);
+					this.player.entityID = readInt ();
+					entities.Add (this.player.entityID, this.player);
 					readString ();
-					string levelType = readString ();
-					int serverMode = readInt ();
-					int dimension = readInt ();
-					byte difficulty = readByte ();
+					this.levelType = readString ();
+					this.serverMode = (ServerMode)readInt ();
+					this.dimension = (Dimension)readInt ();
+					this.difficulty = (Difficulty)readByte ();
 					readByte ();
-					byte maxPlayers = readByte ();
-					Console.WriteLine ("Entity ID: {0}", EntityId);
-					Console.WriteLine ("Level Type: {0}", levelType);
-					Console.WriteLine ("Server mode: {0}", serverMode == 0 ? "Survival" : "Creative");
-					Console.WriteLine ("Dimension: {0}", dimension == -1 ? "Nether" : (dimension == 0 ? "Overworld" : "End"));
-					Console.WriteLine (
-					"Difficulty: {0}",
-					difficulty == 0 ? "Peaceful" : (difficulty == 1 ? "Easy" : (difficulty == 2 ? "Normal" : "Hard"))
-					);
-					Console.WriteLine ("Max players: {0}", maxPlayers);
+					this.maxPlayers = readByte ();
+					Console.WriteLine ("Entity ID: {0}", this.player.entityID);
+					Console.WriteLine ("Level Type: {0}", this.levelType);
+					Console.WriteLine ("Server mode: {0}", Enum.GetName (typeof(ServerMode), this.serverMode));
+					Console.WriteLine ("Dimension: {0}", Enum.GetName (typeof(Dimension), this.dimension));
+					Console.WriteLine ("Difficulty: {0}", Enum.GetName (typeof(Difficulty), this.difficulty));
+					Console.WriteLine ("Max players: {0}", this.maxPlayers);
 					break;
-				case 0xFF:
+				case PacketID.DisconnectKick:
 					string serverAnswer = readString ();
 					Console.WriteLine ("Dissconnected: {0}", serverAnswer);
 					isConnected = false;
 					break;
-				case 0x00:
+				case PacketID.KeepAlive:
 					this.SendPacket (new object[]{(byte)PacketID.KeepAlive,readInt ()});
 					break;
-				case 0xFA:
+				case PacketID.PluginMessage:
 					string channel = readString ();
 					byte[] data = readBytes (readShort ());
 					Console.WriteLine ("Plugins data for {0} size: {1}", channel, data.Length);
 					break;
-				case 0x06:
-					int X = readInt ();
-					int Y = readInt ();
-					int Z = readInt ();
-				//Console.WriteLine ("Spawn position: X: {0} Y: {1} Z: {2}", X, Y, Z);
+				case PacketID.SpawnPosition:
+					this.spawnPosition = new XYZ<int> (readInt (), readInt (), readInt ());
+					//Console.WriteLine ("Spawn position: X: {0} Y: {1} Z: {2}", X, Y, Z);
 					break;
-				case 0xCA:
-					bool invulnerability = readBool ();
-					bool isFlying = readBool ();
-					bool canFly = readBool ();
-					bool instantDestroy = readBool ();
-					Console.WriteLine (invulnerability ? "Player cannot take damage" : "Player can take damage");
-					Console.WriteLine (isFlying ? "Player is currently flying" : "Player is't currently flying");
-					Console.WriteLine (canFly ? "Player is able to fly" : "Player is't able to fly");
-					Console.WriteLine (instantDestroy ? "Player can destroy blocks instantly" : "Player can't destroy blocks instantly");
+				case PacketID.PlayerAbilities:
+					this.player.invulnerability = readBool ();
+					this.player.isFlying = readBool ();
+					this.player.canFly = readBool ();
+					this.player.instantDestroy = readBool ();
+					Console.WriteLine (this.player.invulnerability ? "Player cannot take damage" : "Player can take damage");
+					Console.WriteLine (this.player.isFlying ? "Player is currently flying" : "Player is't currently flying");
+					Console.WriteLine (this.player.canFly ? "Player is able to fly" : "Player is't able to fly");
+					Console.WriteLine (this.player.instantDestroy ? "Player can destroy blocks instantly" : "Player can't destroy blocks instantly");
 					break;
-				case 0x04:
-					long time = readLong ();
+				case PacketID.TimeUpdate:
+					this.time = readLong ();
 				//Console.WriteLine ("Time: {0}", time);
 					break;
-				case 0x03:
+				case PacketID.ChatMessage:
 					string msg = readString ();
-					Console.WriteLine ("Chat message: {0}", msg);
+					if (clearString (msg).Length > 0) {
+						this.chat.Add (clearString (msg));
+						Console.WriteLine ("--|{0}", clearString (msg));
+					}
 					break;
-				case 0x0D:
-					double x = readDouble ();
-					double stance = readDouble ();
-					double y = readDouble ();
-					double z = readDouble ();
-					float yaw = readFloat ();
-					float pitch = readFloat ();
-					bool onGround = readBool ();
-					Console.WriteLine ("Absolute position: X:{0:0.##} Y:{1:0.##} Z:{2:0.##} Stance:{3:0.##}", x, y, z, stance);
-					Console.WriteLine ("Absolute rotation: X:{0} Y:{1}", yaw, pitch);
-					Console.WriteLine ("On ground: {0}", onGround ? "yes" : "no");
-					this.SendPacket (new object[]{(byte)PacketID.PlayerPositionLook,x,y,stance,z,yaw,pitch,onGround});
+				case PacketID.PlayerPositionLook:
+					this.player.position.x = readDouble ();
+					stance = readDouble ();
+					this.player.position.y = readDouble ();
+					this.player.position.z = readDouble ();
+					this.player.look.yaw = readFloat ();
+					this.player.look.pitch = readFloat ();
+					this.player.onGround = readBool ();
+					this.player.height = stance - this.player.position.y;
+					Console.WriteLine (
+						"Absolute position: X:{0:0.##} Y:{1:0.##} Z:{2:0.##} Height:{3:0.##}",
+						this.player.position.x,
+						this.player.position.y,
+						this.player.position.z, this.player.height);
+					Console.WriteLine ("Absolute rotation: X:{0} Y:{1}", this.player.look.yaw, this.player.look.pitch);
+					Console.WriteLine ("On ground: {0}", this.player.onGround ? "yes" : "no");
+					this.SendPacket (new object[] {
+						(byte)PacketID.PlayerPositionLook,
+						this.player.position.x,
+						this.player.position.y,
+						this.player.position.y + this.player.height,
+						this.player.position.z,this.player.look.yaw,this.player.look.pitch,this.player.onGround}
+					);
 					break;
-				case 0x0A:
-					bool onground = readBool ();
-					Console.WriteLine ("On ground: {0}", onground ? "yes" : "no");
+				case PacketID.Player:
+					this.player.onGround = readBool ();
+					Console.WriteLine ("On ground: {0}", this.player.onGround ? "yes" : "no");
 					break;
-				case 0x0B:
-					double x1 = readDouble ();
-					double y1 = readDouble ();
-					double stance1 = readDouble ();
-					double z1 = readDouble ();
-					Console.WriteLine ("Absolute position: X:{0} Y:{1} Z:{2} Stance:{3}", x1, y1, z1, stance1);
+				case PacketID.PlayerPosition:
+					this.player.position.x = readDouble ();
+					this.player.position.y = readDouble ();
+					stance = readDouble ();
+					this.player.position.z = readDouble ();
+					this.player.height = stance - this.player.position.y;
+					Console.WriteLine (
+						"Absolute position: X:{0} Y:{1} Z:{2} Height:{3}",
+						this.player.position.x,
+						this.player.position.y,
+						this.player.position.z,
+						this.player.height
+					);
 					break;
-				case 0x19:
-					readInt ();
-					string title = readString ();
-					int x2 = readInt ();
-					int y2 = readInt ();
-					int z2 = readInt ();
-					int direction = readInt ();
+				case PacketID.SpawnPainting:
+					Painting picture = new Painting ();
+					picture.entityID = readInt ();
+					picture.title = readString ();
+					picture.centerPosition.x = readInt ();
+					picture.centerPosition.y = readInt ();
+					picture.centerPosition.z = readInt ();
+					picture.direction = readInt ();
+					this.entities.Add (picture.entityID, picture);
 				//Console.WriteLine ("Spawn Painting: {4} X:{0} Y:{1} Z:{2} Direction:{3}", x2, y2, z2, direction, title);
 					break;
-				case 0x23:
-					readInt ();
-					byte headYew = readByte ();
+				case PacketID.EntityHeadLook:
+					entityID = readInt ();
+					if (entities.ContainsKey (entityID))
+						entities [entityID].headYaw = readByte ();
+					else
+						readByte ();
 				//Console.WriteLine ("Head yaw: {0} steps", headYew);
 					break;
-				case 0x18:
-					readInt ();
-					byte type = readByte ();
-					int x3 = readInt ();
-					int y3 = readInt ();
-					int z3 = readInt ();
-					byte yaw2 = readByte ();
-					byte pitch2 = readByte ();
-					byte headYaw2 = readByte ();
-					int metadata = readMetadata ();
+				case PacketID.SpawnMob:
+					Mob mob = new Mob ();
+					mob.entityID = readInt ();
+					mob.type = readByte ();
+					mob.position.x = readInt ();
+					mob.position.y = readInt ();
+					mob.position.z = readInt ();
+					mob.look.yaw = readByte ();
+					mob.look.pitch = readByte ();
+					mob.headYaw = readByte ();
+					mob.metadata = readMetadata ();
+					entities.Add (mob.entityID, mob);
 				/*Console.WriteLine (
 					"Spawn Mob: Type:{0} X:{1} Y:{2} Z:{3} Yaw:{4} Pitch:{5} Head Yaw:{6} Metadate size:{7}",
 					type,
@@ -200,77 +263,117 @@ namespace BrainBot
 					metadata
 				);*/
 					break;
-				case 0x1C:
-					readInt ();
-					short vX = readShort ();
-					short vY = readShort ();
-					short vZ = readShort ();
+				case PacketID.EntityVelocity:
+					entityID = readInt ();
+					if (entities.ContainsKey (entityID)) {
+						entities [entityID].velocity.x = readShort ();
+						entities [entityID].velocity.y = readShort ();
+						entities [entityID].velocity.z = readShort ();
+					}
 				//Console.WriteLine ("Velocity: X:{0} Y:{1} Z:{1}", vX / 28800.0, vY / 28800.0, vZ / 28800.0);
 					break;
-				case 0x14:
-					int playerID = readInt ();
-					string playerName = readString ();
-					int x4 = readInt ();
-					int y4 = readInt ();
-					int z4 = readInt ();
-					byte yaw3 = readByte ();
-					byte pitch3 = readByte ();
-					short currentItem = readShort ();
+				case PacketID.SpawnNamedEntity:
+					{
+						OtherPlayer p = new OtherPlayer ();
+						p.entityID = readInt ();
+						p.name = readString ();
+						p.position.x = readInt ();
+						p.position.y = readInt ();
+						p.position.z = readInt ();
+						p.look.yaw = readByte ();
+						p.look.pitch = readByte ();
+						p.currentItem = readShort ();
+						entities.Add (p.entityID, p);
+						Console.WriteLine (
+						"Player spawned: {3} X:{0} Y:{1} Z:{2} yaw:{4} pitch:{5} withItem:{6}",
+						p.position.x,
+						p.position.y,
+						p.position.z,
+						p.name,
+						p.look.yaw,
+						p.look.pitch,
+						p.currentItem
+						);
+					}
+					break;
+				case PacketID.EntityEquipment:
+					entityID = readInt ();
+					if (entities.ContainsKey (entityID)) {
+						if (entities [entityID].GetType () == typeof(OtherPlayer)) {
+							OtherPlayer p = (OtherPlayer)entities [entityID];
+							Armor armor = new Armor ();
+							armor.slot = readShort ();
+							armor.itemID = readShort ();
+							armor.damage = readShort ();
+							p.armor.Add (armor.slot, armor);
+							Console.WriteLine ("Equipment: slot:{0} itemID:{1} damage:{2}", armor.slot, armor.itemID, armor.damage);
+						}
+					}
+					break;
+				case PacketID.SpawnDroppedItem:
+					DroppedItem item = new DroppedItem ();
+					item.entityID = readInt ();
+					//readInt ();
+					item.item = readShort ();
+					item.count = readByte ();
+					item.data = readShort ();
+					item.position.x = readInt ();
+					item.position.z = readInt ();
+					item.position.y = readInt ();
+					item.rotation = readByte ();
+					item.pitch = readByte ();
+					item.roll = readByte ();
+					entities.Add (item.entityID, item);
 					Console.WriteLine (
-					"Player spawned: {3} X:{0} Y:{1} Z:{2} yaw:{4} pitch:{5} withItem:{6}",
-					x4,
-					y4,
-					z4,
-					playerName,
-					yaw3,
-					pitch3,
-					currentItem
+						"Dropped item: item:{0}:{2} count:{1} x:{3} y:{4} z:{5} rotation:{6} pitch:{7} roll:{8}",
+					item.item,
+					item.count,
+					item.data,
+					item.position.x,
+					item.position.y,
+					item.position.z,
+					item.rotation,
+					item.pitch,
+					item.roll
 					);
 					break;
-				case 0x05:
-					readInt ();
-					short slot = readShort ();
-					short itemID = readShort ();
-					short damage = readShort ();
-					Console.WriteLine ("Equipment: slot:{0} itemID:{1} damage:{2}", slot, itemID, damage);
-					break;
-				case 0x15:
-					readInt ();
-					short Item = readShort ();
-					byte _count = readByte ();
-					short _damage = readShort ();
-					int x5 = readInt ();
-					int y5 = readInt ();
-					int z5 = readInt ();
-					byte rotation = readByte ();
-					byte pitch4 = readByte ();
-					byte roll = readByte ();
-					Console.WriteLine (
-					"Dropped item: item:{0} count:{1} data:{2} x:{3} y:{4} z:{5} rotation:{6} pitch:{7} roll:{8}",
-					Item,
-					_count,
-					_damage,
-					x5,
-					y5,
-					z5,
-					rotation,
-					pitch4,
-					roll
-					);
-					break;
-				case 0x32:
-					int x6 = readInt ();
-					int y6 = readInt ();
-					bool mode = readBool ();
+				case PacketID.MapColumnAllocation:
+					{
+						Chunk chunk = new Chunk ();
+						chunk.position.z = readInt ();
+						chunk.position.y = readInt ();
+						bool mode = readBool ();
+						if (mode) {
+							map.Add (chunk);
+						} else {
+							Chunk result = map.Find (delegate(Chunk ch) {
+								return ch.position.Equals (chunk.position);
+							}
+							); 
+							if (result != null) {
+								map.Remove (result);
+							}
+						}
+					}
 				//Console.WriteLine ("Need to {0} the chunk X:{1} Y{2}", mode ? "initialize" : "unload", x6, y6);
 					break;
-				case 0xC9:
-					string name = readString ();
+				case PacketID.PlayerListItem:
+					PlayerListItem playerItem = new PlayerListItem ();
+					playerItem.name = clearString (readString ());
 					bool online = readBool ();
-					short ping = readShort ();
-					Console.WriteLine ("Player:{0} ping:{1} {2} game", name, ping, online ? "enter" : "exit");
+					playerItem.ping = readShort ();
+					if (online) {
+						playerList.Add (playerItem);
+					} else {
+						playerList.Remove (playerList.Find (delegate(PlayerListItem pli) {
+							return pli.name == playerItem.name;
+						}
+						)
+						);
+					}
+					Console.WriteLine ("Player:{0} ping:{1} {2} game", playerItem.name, playerItem.ping, online ? "enter" : "exit");
 					break;
-				case 0x68:
+				case PacketID.SetWindowItems:
 					byte windowId = readByte ();
 					short count2 = readShort ();
 				//Console.Write ("Window items: count:{0}", count2);
@@ -287,7 +390,7 @@ namespace BrainBot
 					}
 				//Console.WriteLine ();
 					break;
-				case 0x67:
+				case PacketID.SetSlot:
 					byte winID = readByte ();
 					short _slot = readShort ();
 					short _id = readShort ();
@@ -307,7 +410,7 @@ namespace BrainBot
 					} //else
 					//Console.WriteLine ("Set slot: [window:{2} {0};{1}]", _slot, "Empty", winID);
 					break;
-				case 0x1A:
+				case PacketID.SpawnExperienceOrb:
 					readInt ();
 					int x7 = readInt ();
 					int y7 = readInt ();
@@ -315,24 +418,24 @@ namespace BrainBot
 					int count3 = readShort ();
 					Console.WriteLine ("Spawn expirience orb: x:{0} y:{1} z:{2} count:{3}", x7, y7, z7, count3);
 					break;
-				case 0x1F:
+				case PacketID.EntityRelativeMove:
 					readInt ();
 					byte dx = readByte ();
 					byte dy = readByte ();
 					byte dz = readByte ();
 				//Console.WriteLine ("Entity move: dx:{0} dy:{1} dz:{2}", dx, dy, dz);
 					break;
-				case 0x20:
+				case PacketID.EntityLook:
 					readInt ();
 					byte yaw4 = readByte ();
 					byte pitch5 = readByte ();
 				//Console.WriteLine ("Entity rotate: yaw:{0} pitch:{1}", yaw4, pitch5);
 					break;
-				case 0x1D:
-					readInt ();
+				case PacketID.DestroyEntity:
+					entities.Remove (readInt ());
 				//Console.WriteLine ("Destroy entity");
 					break;
-				case 0x22:
+				case PacketID.EntityTeleport:
 					readInt ();
 					int x8 = readInt ();
 					int y8 = readInt ();
@@ -341,7 +444,7 @@ namespace BrainBot
 					byte pitch8 = readByte ();
 				//Console.WriteLine ("Entity teleport: X:{0} Y:{1} Z:{2} yaw:{3} pitch:{4}", x8, y8, z8, yaw8, pitch8);
 					break;
-				case 0x36:
+				case PacketID.BlockAction:
 					int x9 = readInt ();
 					short y9 = readShort ();
 					int z9 = readInt ();
@@ -349,7 +452,7 @@ namespace BrainBot
 					byte byte2 = readByte ();
 				//Console.WriteLine ("Block action: X:{0} Y:{1} Z:{2} bytes:[{3},{4}]",x9,y9,z9,byte1,byte2);
 					break;
-				case 0x21:
+				case PacketID.EntityLookandRelativeMove:
 					readInt ();
 					int x10 = readByte ();
 					int y10 = readByte ();
@@ -358,15 +461,15 @@ namespace BrainBot
 					byte pitch9 = readByte ();
 				//Console.WriteLine ("Entity relative look/move: dX:{0} dY:{1} dZ:{2} Yaw:{3} Pitch:{4}", x10, y10, z10, yaw9, pitch9);
 					break;
-				case 0x28:
+				case PacketID.EntityMetadata:
 					readInt ();
 					int msize = readMetadata ();
 					break;
-				case 0x12:
+				case PacketID.Animation:
 					readInt ();
 					readByte ();
 					break;
-				case 0x17:
+				case PacketID.SpawnObjectVehicle:
 					readInt ();
 					readByte ();
 					readInt ();
@@ -378,25 +481,27 @@ namespace BrainBot
 					readShort ();
 					Console.WriteLine ("Spawn object/vehicle");
 					break;
-				case 0x26:
+				case PacketID.EntityStatus:
 					readInt ();
 					readByte ();
 					break;
-				case 0xc8:
+				case PacketID.IncrementStatistic:
 					int statisticID = readInt ();
 					byte value = readByte ();
 					Console.WriteLine ("Statistic {0} change to {1}", statisticID, value);
 					break;
-				case 0x08:
-					short health = readShort ();
-					short food = readShort ();
-					float saturation = readFloat ();
-					Console.WriteLine ("Update health:{0} food:{1} saturation:{2}", health, food, saturation);
-					if (health <= 0) {
+				case PacketID.UpdateHealth:
+					this.player.health = readShort ();
+					this.player.food = readShort ();
+					this.player.saturation = readFloat ();
+					Console.WriteLine (
+						"Update health:{0} food:{1} saturation:{2}",
+						this.player.health, this.player.food, this.player.saturation);
+					if (this.player.health <= 0) {
 						this.SendPacket (new object[]{PacketID.Respawn,(int)0,(byte)1,(byte)1,(short)256,"default"});
 					}
 					break;
-				case 0x11:
+				case PacketID.UseBed:
 					readInt ();
 					readByte ();
 					readInt ();
@@ -404,35 +509,35 @@ namespace BrainBot
 					readInt ();
 					Console.WriteLine ("use bad");
 					break;
-				case 0x16:
+				case PacketID.CollectItem:
 					readInt ();
 					readInt ();
 					Console.WriteLine ("Someone pick up items");
 					break;
-				case 0x1e:
-					readInt ();
+				case PacketID.Entity:
+					entities.Add (readInt (), new Entity ());
 					break;
-				case 0x27:
+				case PacketID.AttachEntity:
 					readInt ();
 					readInt ();
 					Console.WriteLine ("Attach player to vehicle");
 					break;
-				case 0x29:
+				case PacketID.EntityEffect:
 					readInt ();
 					readByte ();
 					readByte ();
 					readShort ();
 					break;
-				case 0x2A:
+				case PacketID.RemoveEntityEffect:
 					readInt ();
 					readByte ();
 					break;
-				case 0x2B:
+				case PacketID.SetExperience:
 					readFloat ();
 					readShort ();
 					readShort ();
 					break;
-				case 0x33:
+				case PacketID.MapChunks:
 					readInt ();
 					readInt ();
 					readBool ();
@@ -443,7 +548,7 @@ namespace BrainBot
 					readBytes (size);
 					Console.WriteLine ("Chunk uploaded size:{0}", size);
 					break;
-				case 0x34:
+				case PacketID.MultiBlockChange:
 					readInt ();
 					readInt ();
 					readShort ();
@@ -451,14 +556,14 @@ namespace BrainBot
 					readBytes (_size);
 					Console.WriteLine ("Multi block changes size:{0}", _size);
 					break;
-				case 0x35:
+				case PacketID.BlockChange:
 					readInt ();
 					readByte ();
 					readInt ();
 					readByte ();
 					readByte ();
 					break;
-				case 0x3C:
+				case PacketID.Explosion:
 					readDouble ();
 					readDouble ();
 					readDouble ();
@@ -467,19 +572,19 @@ namespace BrainBot
 					readBytes (size2 * 3);
 					Console.WriteLine ("Explosion records:{0}", size2);
 					break;
-				case 0x3D:
+				case PacketID.SoundParticleEffect:
 					readInt ();
 					readInt ();
 					readByte ();
 					readInt ();
 					readInt ();
 					break;
-				case 0x46:
+				case PacketID.ChangeGameState:
 					byte byte3 = readByte ();
 					byte byte4 = readByte ();
 					Console.WriteLine (@"Change game mod: reason: {0} game mod:{1}", byte3, byte4);
 					break;
-				case 0x47:
+				case PacketID.Thunderbolt:
 					readInt ();
 					readBool ();
 					readInt ();
@@ -487,30 +592,30 @@ namespace BrainBot
 					readInt ();
 					Console.WriteLine ("Thunderbolt!");
 					break;
-				case 0x64:
+				case PacketID.OpenWindow:
 					readByte ();
 					readByte ();
 					string winTitle = readString ();
 					int slotnum = readByte ();
 					Console.WriteLine ("Open window {0} slots:{1}", winTitle, slotnum);
 					break;
-				case 0x65:
+				case PacketID.CloseWindow:
 					readByte ();
 					Console.WriteLine ("Close window");
 					break;
-				case 0x69:
+				case PacketID.UpdateWindowProperty:
 					readByte ();
 					readShort ();
 					readShort ();
 					break;
-				case 0x83:
+				case PacketID.ItemData:
 					readShort ();
 					readShort ();
 					int textLength = readByte ();
 					byte[] text = readBytes (textLength);
 					Console.WriteLine ("Item data: {0}", Encoding.ASCII.GetString (text));
 					break;
-				case 0x84:
+				case PacketID.UpdateTileEntity:
 					readInt ();
 					readShort ();
 					readInt ();
@@ -519,28 +624,25 @@ namespace BrainBot
 					readInt ();
 					readInt ();
 					break;
-				case 0x09:
-					int dimension2 = readInt ();
-					byte difficulty2 = readByte ();
-					byte creativeMode = readByte ();
-					short worldHeight = readShort ();
-					string levelType2 = readString ();
-					Console.WriteLine ("Level Type: {0}", levelType2);
-					Console.WriteLine ("Dimension: {0}", dimension2 == -1 ? "Nether" : (dimension2 == 0 ? "Overworld" : "End"));
-					Console.WriteLine (
-					"Difficulty: {0}",
-					difficulty2 == 0 ? "Peaceful" : (difficulty2 == 1 ? "Easy" : (difficulty2 == 2 ? "Normal" : "Hard"))
-					);
-					Console.WriteLine ("Creative: {0}", creativeMode);
-					Console.WriteLine ("World height: {0}", worldHeight);
+				case PacketID.Respawn:
+					this.dimension = (Dimension)readInt ();
+					this.difficulty = (Difficulty)readByte ();
+					this.serverMode = (ServerMode)readByte ();
+					this.worldHeight = readShort ();
+					this.levelType = readString ();
+					Console.WriteLine ("Level Type: {0}", this.levelType);
+					Console.WriteLine ("Server mode: {0}", Enum.GetName (typeof(ServerMode), this.serverMode));
+					Console.WriteLine ("Dimension: {0}", Enum.GetName (typeof(Dimension), this.dimension));
+					Console.WriteLine ("Difficulty: {0}", Enum.GetName (typeof(Difficulty), this.difficulty));
+					Console.WriteLine ("World height: {0}", this.worldHeight);
 					break;
-				case 0x6A:
+				case PacketID.ConfirmTransaction:
 					readByte ();
 					readShort ();
 					readBool ();
 					Console.WriteLine ("Confirm transaction");
 					break;
-				case 0x6B:
+				case PacketID.CreativeInventoryAction:
 					readShort ();
 					short _id2 = readShort ();
 					if (_id2 != -1) {
@@ -550,7 +652,7 @@ namespace BrainBot
 							readBytes (_data);
 					}
 					break;
-				case 0x82:
+				case PacketID.UpdateSign:
 					readInt ();
 					readShort ();
 					readInt ();
@@ -558,7 +660,7 @@ namespace BrainBot
 					string line2 = readString ();
 					string line3 = readString ();
 					string line4 = readString ();
-					Console.WriteLine ("Update sign:{0}/{1}/{2}/{3}", line1, line2, line3, line4);
+					Console.WriteLine ("Update sign:{0} {1} {2} {3}", line1, line2, line3, line4);
 					break;
 				default:
 					Console.WriteLine ("Unknown response: {0} ", Convert.ToString ((byte)packetID, 16));
