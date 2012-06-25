@@ -31,6 +31,14 @@ namespace BrainBot
 		public Dictionary<string,short> playerList;
 		public short worldHeight = 256;
 		public bool isLogged;
+		public List<PacketID> packetHistory;
+		
+		private long packetCountReceived = 0;
+		private long packetCountSend = 0;
+		private long packetSizeReceived = 0;
+		private long packetSizeSend = 0;
+		private long commandCountReceived = 0;
+		private long commandCountSend = 0;
 		public Minecraft (string server, ushort port)
 		{
 			this.server = server;
@@ -45,6 +53,7 @@ namespace BrainBot
 			map = new List<Chunk> ();
 			time = 0;
 			playerList = new Dictionary<string, short> ();
+			packetHistory = new List<PacketID> ();
 			isLogged = false;
 		}
 		public void Status ()
@@ -73,8 +82,16 @@ namespace BrainBot
 		}
 		public void Start (string name)
 		{
-			this.connectName = name;
-			this.EnterGame ();	
+			try {
+				this.connectName = name;
+				this.EnterGame ();	
+			} catch {
+				for (int i = packetHistory.Count-100; i<packetHistory.Count; i++) {
+					if (i < 0)
+						continue;
+					Console.WriteLine(Enum.GetName(typeof(PacketID),packetHistory[i]));
+				}
+			}
 		}
 		public void writeToChat (string message)
 		{
@@ -129,14 +146,17 @@ namespace BrainBot
 			PacketID packetID;
 			while (isConnected) {
 				packetID = (PacketID)readByte ();
+				this.commandCountReceived++;
+				packetHistory.Add (packetID);
 				double stance;
 				int entityID = 0;
-				//Console.WriteLine (Enum.GetName(typeof(PacketID),packetID));
+				Console.WriteLine (
+					"[{0}:{1}:{2}] [{3}]: {4}",this.commandCountReceived,this.packetCountReceived,this.packetSizeReceived,DateTime.Now.ToLongTimeString(),Enum.GetName(typeof(PacketID),packetID));
 				switch (packetID) {
 				case PacketID.LoginRequest:
 					this.player = new Player (this.connectName, this);
 					this.player.entityID = readInt ();
-					entities[this.player.entityID]=this.player;
+					entities [this.player.entityID] = this.player;
 					readString ();
 					this.levelType = readString ();
 					this.serverMode = (ServerMode)readInt ();
@@ -191,16 +211,19 @@ namespace BrainBot
 					}
 					break;
 				case PacketID.PlayerPositionLook:
-					this.player.position.x = readDouble ();
-					stance = readDouble ();
-					this.player.position.y = readDouble ();
-					this.player.position.z = readDouble ();
-					this.player.look.yaw = readFloat ();
-					this.player.look.pitch = readFloat ();
-					this.player.onGround = readBool ();
-					this.player.height = stance - this.player.position.y;
+					lock (this.player) {
+						this.player.position.x = readDouble ();
+						stance = readDouble ();
+						this.player.position.y = readDouble ();
+						this.player.position.z = readDouble ();
+						this.player.endPosition = this.player.position;
+						this.player.look.yaw = readFloat ();
+						this.player.look.pitch = readFloat ();
+						this.player.onGround = readBool ();
+						this.player.height = stance - this.player.position.y;
+					}
 					Console.WriteLine (
-						"Absolute position: X:{0:0.##} Y:{1:0.##} Z:{2:0.##} Height:{3:0.##}",
+						"Absolute position: X:{0:0.####} Y:{1:0.####} Z:{2:0.####} Height:{3:0.###!#}",
 						this.player.position.x,
 						this.player.position.y,
 						this.player.position.z, this.player.height);
@@ -220,11 +243,14 @@ namespace BrainBot
 					Console.WriteLine ("On ground: {0}", this.player.onGround ? "yes" : "no");
 					break;
 				case PacketID.PlayerPosition:
-					this.player.position.x = readDouble ();
-					this.player.position.y = readDouble ();
-					stance = readDouble ();
-					this.player.position.z = readDouble ();
-					this.player.height = stance - this.player.position.y;
+					lock (this.player) {
+						this.player.position.x = readDouble ();
+						this.player.position.y = readDouble ();
+						stance = readDouble ();
+						this.player.position.z = readDouble ();
+						this.player.height = stance - this.player.position.y;
+						this.player.endPosition = this.player.position;
+					}
 					Console.WriteLine (
 						"Absolute position: X:{0} Y:{1} Z:{2} Height:{3}",
 						this.player.position.x,
@@ -682,10 +708,12 @@ namespace BrainBot
 				return;
 			byte[] buffer = new byte[4096];
 			int size = this.client.Receive (buffer);
+			this.packetCountReceived++;
+			this.packetSizeReceived += size;
 			Array.Resize (ref buffer,size);
 			this.stream.AddRange (buffer);
 		}
-		private void SendPacket (object[] commands)
+		public void SendPacket (object[] commands)
 		{
 			if (!isConnected)
 				return;
