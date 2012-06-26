@@ -1,6 +1,3 @@
-!moveTo x y z
-!look yaw pitch
-!player onGround <- я так и не понял как это работает
-!startMoving 
-!stopMoving
-все остальное отправляется в игровой чат
+!player (true|false) - onground
+!move x y z - move to
+!control - turn on control mode (WASD SPACE X, Q - to normal mode)
