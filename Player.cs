@@ -49,16 +49,16 @@ namespace BrainBot
 				this.onGround = ground;
 			}
 		}
+		private double getDistance (XYZ<double> first, XYZ<double> second)
+		{
+			return Math.Sqrt(Math.Pow (second.x - first.x, 2) + Math.Pow (second.y - first.y, 2) + Math.Pow (second.z - first.z,2));
+		}
 		private void nextMove ()
 		{
 			lock (this) {
 				if (this.endPosition != null && !this.position.Equals (this.endPosition)) {
-					double realSpeed = this.speed / 1000.0 * this.moving.Interval;
-					double distance = Math.Sqrt (Math.Pow (endPosition.x - position.z, 2) + Math.Pow (endPosition.y - position.y, 2) + Math.Pow (
-						endPosition.z - position.z,
-						2
-					)
-					);
+					double realSpeed = this.speed / 1000.0 * moving.Interval;
+					double distance = getDistance (endPosition, position);
 					double u = realSpeed / (distance - realSpeed);
 					XYZ<double> nextPosition = new XYZ<double> (0, 0, 0);
 					nextPosition.x = (position.x + u * endPosition.x) / (1 + u);
@@ -67,7 +67,15 @@ namespace BrainBot
 					this.position = nextPosition;
 					if (realSpeed >= distance)
 						this.position = this.endPosition;
-					this.minecraft.SendPacket (new object[]{(byte)PacketID.PlayerPosition,this.position.x,this.position.y,this.position.y+this.height,this.position.z,this.onGround});
+					this.minecraft.SendPacket (new object[] {
+						(byte)PacketID.PlayerPosition,
+						this.position.x,
+						this.position.y,
+						this.position.y + this.height,
+						this.position.z,
+						this.onGround
+					}
+					);					
 				}
 			}
 		}

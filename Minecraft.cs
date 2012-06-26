@@ -89,7 +89,7 @@ namespace BrainBot
 				for (int i = packetHistory.Count-100; i<packetHistory.Count; i++) {
 					if (i < 0)
 						continue;
-					Console.WriteLine(Enum.GetName(typeof(PacketID),packetHistory[i]));
+					Console.WriteLine ("Debug: {0}",Enum.GetName(typeof(PacketID),packetHistory[i]));
 				}
 			}
 		}
@@ -150,8 +150,8 @@ namespace BrainBot
 				packetHistory.Add (packetID);
 				double stance;
 				int entityID = 0;
-				Console.WriteLine (
-					"[{0}:{1}:{2}] [{3}]: {4}",this.commandCountReceived,this.packetCountReceived,this.packetSizeReceived,DateTime.Now.ToLongTimeString(),Enum.GetName(typeof(PacketID),packetID));
+				//Console.WriteLine (
+				//	"[{0}:{1}:{2}] [{3}]: {4}",this.commandCountReceived,this.packetCountReceived,this.packetSizeReceived,DateTime.Now.ToLongTimeString(),Enum.GetName(typeof(PacketID),packetID));
 				switch (packetID) {
 				case PacketID.LoginRequest:
 					this.player = new Player (this.connectName, this);
@@ -267,7 +267,7 @@ namespace BrainBot
 					picture.centerPosition.y = readInt ();
 					picture.centerPosition.z = readInt ();
 					picture.direction = readInt ();
-					this.entities[picture.entityID]=picture;
+					this.entities [picture.entityID] = picture;
 				//Console.WriteLine ("Spawn Painting: {4} X:{0} Y:{1} Z:{2} Direction:{3}", x2, y2, z2, direction, title);
 					break;
 				case PacketID.EntityHeadLook:
@@ -289,7 +289,7 @@ namespace BrainBot
 					mob.look.pitch = readByte ();
 					mob.headYaw = readByte ();
 					mob.metadata = readMetadata ();
-					entities[mob.entityID]= mob;
+					entities [mob.entityID] = mob;
 				/*Console.WriteLine (
 					"Spawn Mob: Type:{0} X:{1} Y:{2} Z:{3} Yaw:{4} Pitch:{5} Head Yaw:{6} Metadate size:{7}",
 					type,
@@ -308,6 +308,10 @@ namespace BrainBot
 						entities [entityID].velocity.x = readShort ();
 						entities [entityID].velocity.y = readShort ();
 						entities [entityID].velocity.z = readShort ();
+					} else {
+						readShort ();
+						readShort ();
+						readShort ();
 					}
 				//Console.WriteLine ("Velocity: X:{0} Y:{1} Z:{1}", vX / 28800.0, vY / 28800.0, vZ / 28800.0);
 					break;
@@ -322,7 +326,7 @@ namespace BrainBot
 						p.look.yaw = readByte ();
 						p.look.pitch = readByte ();
 						p.currentItem = readShort ();
-						entities[p.entityID]=p;
+						entities [p.entityID] = p;
 						Console.WriteLine (
 						"Player spawned: {3} X:{0} Y:{1} Z:{2} yaw:{4} pitch:{5} withItem:{6}",
 						p.position.x,
@@ -337,16 +341,18 @@ namespace BrainBot
 					break;
 				case PacketID.EntityEquipment:
 					entityID = readInt ();
-					if (entities.ContainsKey (entityID)) {
-						if (entities [entityID].GetType () == typeof(OtherPlayer)) {
-							OtherPlayer p = (OtherPlayer)entities [entityID];
-							Armor armor = new Armor ();
-							armor.slot = readShort ();
-							armor.itemID = readShort ();
-							armor.damage = readShort ();
-							p.armor[armor.slot]=armor;
-							Console.WriteLine ("Equipment: slot:{0} itemID:{1} damage:{2}", armor.slot, armor.itemID, armor.damage);
-						}
+					if (entities.ContainsKey (entityID) && entities [entityID].GetType () == typeof(OtherPlayer)) {
+						OtherPlayer p = (OtherPlayer)entities [entityID];
+						Armor armor = new Armor ();
+						armor.slot = readShort ();
+						armor.itemID = readShort ();
+						armor.damage = readShort ();
+						p.armor [armor.slot] = armor;
+						Console.WriteLine ("Equipment: slot:{0} itemID:{1} damage:{2}", armor.slot, armor.itemID, armor.damage);
+					} else {
+						readShort ();
+						readShort ();
+						readShort ();
 					}
 					break;
 				case PacketID.SpawnDroppedItem:
@@ -362,7 +368,7 @@ namespace BrainBot
 					item.rotation = readByte ();
 					item.pitch = readByte ();
 					item.roll = readByte ();
-					entities[item.entityID]=item;
+					entities [item.entityID] = item;
 					Console.WriteLine (
 						"Dropped item: item:{0}:{2} count:{1} x:{3} y:{4} z:{5} rotation:{6} pitch:{7} roll:{8}",
 					item.item,
@@ -401,7 +407,7 @@ namespace BrainBot
 					bool online = readBool ();
 					short ping = readShort ();
 					if (online) {
-						playerList[name]= ping;
+						playerList [name] = ping;
 					} else {
 						playerList.Remove (name);
 					}
@@ -504,16 +510,21 @@ namespace BrainBot
 					readByte ();
 					break;
 				case PacketID.SpawnObjectVehicle:
+					/*for (int i =0; i<50 && i<stream.Count; i++) {
+						Console.Write ("{0} ",Convert.ToString (stream[i],16));
+					}*/
 					readInt ();
 					readByte ();
 					readInt ();
 					readInt ();
 					readInt ();
-					readInt ();
-					readShort ();
-					readShort ();
-					readShort ();
-					Console.WriteLine ("Spawn object/vehicle");
+					int fireball = readInt ();
+					if(fireball>0)
+					{
+						readShort ();
+						readShort ();
+						readShort ();
+					}
 					break;
 				case PacketID.EntityStatus:
 					readInt ();
@@ -549,7 +560,7 @@ namespace BrainBot
 					Console.WriteLine ("Someone pick up items");
 					break;
 				case PacketID.Entity:
-					entities[readInt ()] = new Entity ();
+					entities [readInt ()] = new Entity ();
 					break;
 				case PacketID.AttachEntity:
 					readInt ();
@@ -698,6 +709,9 @@ namespace BrainBot
 					break;
 				default:
 					Console.WriteLine ("Unknown response: {0} ", Convert.ToString ((byte)packetID, 16));
+					isConnected = false;
+					isLogged = false;
+					throw new Exception ();
 					break;
 				}
 			}
