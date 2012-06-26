@@ -47,6 +47,7 @@ namespace BrainBot
 		{
 			lock (this) {
 				this.onGround = ground;
+				this.minecraft.SendPacket (new object[]{(byte)PacketID.Player,this.onGround});
 			}
 		}
 		private double getDistance (XYZ<double> first, XYZ<double> second)

@@ -85,7 +85,8 @@ namespace BrainBot
 			try {
 				this.connectName = name;
 				this.EnterGame ();	
-			} catch {
+			} catch (Exception e) {
+				Console.WriteLine (e.Message);
 				for (int i = packetHistory.Count-100; i<packetHistory.Count; i++) {
 					if (i < 0)
 						continue;
@@ -115,6 +116,8 @@ namespace BrainBot
 		private void EnterGame ()
 		{
 			IPAddress ip = Dns.GetHostAddresses (this.server) [0];
+			if (client != null && client.Connected)
+				client.Close ();
 			client = new Socket (AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
 			client.Connect (ip, this.port);
 			isConnected = true;
@@ -459,11 +462,14 @@ namespace BrainBot
 					Console.WriteLine ("Spawn expirience orb: x:{0} y:{1} z:{2} count:{3}", x7, y7, z7, count3);
 					break;
 				case PacketID.EntityRelativeMove:
-					readInt ();
-					byte dx = readByte ();
-					byte dy = readByte ();
-					byte dz = readByte ();
-				//Console.WriteLine ("Entity move: dx:{0} dy:{1} dz:{2}", dx, dy, dz);
+					entityID = readInt ();
+					sbyte dx = (sbyte)readByte ();
+					sbyte dy = (sbyte)readByte ();
+					sbyte dz = (sbyte)readByte ();
+					if (entities.ContainsKey(entityID) && entities[entityID].GetType()==typeof(OtherPlayer))
+					{
+						Console.WriteLine ("Entity move: dx:{0:0.##} dy:{1:0.##} dz:{2:0.##}", dx/32.0, dy/32.0, dz/32.0);
+					}
 					break;
 				case PacketID.EntityLook:
 					readInt ();
@@ -519,8 +525,7 @@ namespace BrainBot
 					readInt ();
 					readInt ();
 					int fireball = readInt ();
-					if(fireball>0)
-					{
+					if (fireball > 0) {
 						readShort ();
 						readShort ();
 						readShort ();
@@ -542,8 +547,8 @@ namespace BrainBot
 					Console.WriteLine (
 						"Update health:{0} food:{1} saturation:{2}",
 						this.player.health, this.player.food, this.player.saturation);
-					if (this.player.health <= 0) {
-						this.SendPacket (new object[]{PacketID.Respawn,(int)0,(byte)1,(byte)1,(short)256,"default"});
+					if (this.player.health < 1) {
+						this.SendPacket (new object[]{(byte)PacketID.Respawn,(int)this.dimension,(byte)this.difficulty,(byte)this.serverMode,this.worldHeight,this.levelType});
 					}
 					break;
 				case PacketID.UseBed:
@@ -711,7 +716,8 @@ namespace BrainBot
 					Console.WriteLine ("Unknown response: {0} ", Convert.ToString ((byte)packetID, 16));
 					isConnected = false;
 					isLogged = false;
-					throw new Exception ();
+					client.Close ();
+					throw new Exception ("Unknown response");
 					break;
 				}
 			}

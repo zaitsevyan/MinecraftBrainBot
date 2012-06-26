@@ -33,9 +33,46 @@ namespace BrainBot
 							m.player.MoveTo (next);
 						}
 						if (line [0] == "!player" && line.Length >= 2) {
-							bool onGround = true;
+							bool onGround = false;
 							bool.TryParse (line [1], out onGround);
+							Console.WriteLine ("onGround: {0}", onGround);
 							m.player.changeGround (onGround);
+						}
+						if (line [0] == "!control") {
+							ConsoleKeyInfo info = Console.ReadKey ();
+							while (info.KeyChar!='q') {
+								if (info.KeyChar == 'w') {
+									XYZ<double> next = new XYZ<double> (m.player.position.x, m.player.position.y, m.player.position.z);
+									next.x += 0.25;
+									m.player.MoveTo (next);
+								}
+								if (info.KeyChar == 's') {
+									XYZ<double> next = new XYZ<double> (m.player.position.x, m.player.position.y, m.player.position.z);
+									next.x -= 0.25;
+									m.player.MoveTo (next);
+								}
+								if (info.KeyChar == 'a') {
+									XYZ<double> next = new XYZ<double> (m.player.position.x, m.player.position.y, m.player.position.z);
+									next.z -= 0.25;
+									m.player.MoveTo (next);
+								}
+								if (info.KeyChar == 'd') {
+									XYZ<double> next = new XYZ<double> (m.player.position.x, m.player.position.y, m.player.position.z);
+									next.z += 0.25;
+									m.player.MoveTo (next);
+								}
+								if (info.KeyChar == 'x') {
+									XYZ<double> next = new XYZ<double> (m.player.position.x, m.player.position.y, m.player.position.z);
+									next.y -= 0.25;
+									m.player.MoveTo (next);
+								}
+								if (info.KeyChar == ' ') {
+									XYZ<double> next = new XYZ<double> (m.player.position.x, m.player.position.y, m.player.position.z);
+									next.y += 0.25;
+									m.player.MoveTo (next);
+								}
+								info = Console.ReadKey ();
+							}
 						}
 					} else {
 						m.writeToChat (command);
