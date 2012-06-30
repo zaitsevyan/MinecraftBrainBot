@@ -38,6 +38,9 @@ namespace BrainBot
 							Console.WriteLine ("onGround: {0}", onGround);
 							m.player.changeGround (onGround);
 						}
+						if (line [0] == "!map") {
+							m.map.WriteMap ();
+						}
 						if (line [0] == "!control") {
 							ConsoleKeyInfo info = Console.ReadKey ();
 							while (info.KeyChar!='q') {

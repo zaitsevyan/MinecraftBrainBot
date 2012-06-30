@@ -3,10 +3,14 @@ namespace BrainBot
 {
 	public class Chunk
 	{
-		public XYZ<int> position;
-		public Chunk ()
+		public int x;
+		public int z;
+		public int size;
+		public Chunk (int x, int z)
 		{
-			position = new XYZ<int> (0,0,0);
+			this.x = x;
+			this.z = z;
+			this.size = 0;
 		}
 	}
 }

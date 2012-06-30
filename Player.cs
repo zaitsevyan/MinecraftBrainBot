@@ -76,7 +76,8 @@ namespace BrainBot
 						this.position.z,
 						this.onGround
 					}
-					);					
+					);
+					this.minecraft.map.updateMap ();					
 				}
 			}
 		}

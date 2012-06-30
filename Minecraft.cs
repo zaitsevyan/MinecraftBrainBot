@@ -27,7 +27,7 @@ namespace BrainBot
 		public List<string> chat;
 		public Dictionary<int,Entity> entities;
 		public long time;
-		public List<Chunk> map;
+		public Map map;
 		public Dictionary<string,short> playerList;
 		public short worldHeight = 256;
 		public bool isLogged;
@@ -50,7 +50,7 @@ namespace BrainBot
 			stream = new List<byte> ();
 			chat = new List<string> ();
 			entities = new Dictionary<int, Entity> ();
-			map = new List<Chunk> ();
+			map = new Map (this);
 			time = 0;
 			playerList = new Dictionary<string, short> ();
 			packetHistory = new List<PacketID> ();
@@ -219,6 +219,7 @@ namespace BrainBot
 						stance = readDouble ();
 						this.player.position.y = readDouble ();
 						this.player.position.z = readDouble ();
+						this.map.updateMap ();
 						this.player.endPosition = this.player.position;
 						this.player.look.yaw = readFloat ();
 						this.player.look.pitch = readFloat ();
@@ -251,6 +252,7 @@ namespace BrainBot
 						this.player.position.y = readDouble ();
 						stance = readDouble ();
 						this.player.position.z = readDouble ();
+						this.map.updateMap ();
 						this.player.height = stance - this.player.position.y;
 						this.player.endPosition = this.player.position;
 					}
@@ -387,26 +389,20 @@ namespace BrainBot
 					break;
 				case PacketID.MapColumnAllocation:
 					{
-						Chunk chunk = new Chunk ();
-						chunk.position.z = readInt ();
-						chunk.position.y = readInt ();
+						int x = readInt ();
+						int z = readInt ();
 						bool mode = readBool ();
 						if (mode) {
-							map.Add (chunk);
+							this.map.initChunk (x, z);
 						} else {
-							Chunk result = map.Find (delegate(Chunk ch) {
-								return ch.position.Equals (chunk.position);
-							}
-							); 
-							if (result != null) {
-								map.Remove (result);
-							}
+							this.map.unloadChunk (x, z);
 						}
-						Console.WriteLine (
+						/*Console.WriteLine (
 						"Need to {0} the chunk [{1};{2}]",
 						mode ? "initialize" : "unload",
-						chunk.position.z,
-						chunk.position.y);
+						x,
+						z);*/
+						//this.map.WriteMap ();
 					}
 					break;
 				case PacketID.PlayerListItem:
@@ -470,8 +466,7 @@ namespace BrainBot
 					sbyte dx = (sbyte)readByte ();
 					sbyte dy = (sbyte)readByte ();
 					sbyte dz = (sbyte)readByte ();
-					if (entities.ContainsKey(entityID) && entities[entityID].GetType()==typeof(OtherPlayer))
-					{
+					if (entities.ContainsKey (entityID) && entities [entityID].GetType () == typeof(OtherPlayer)) {
 						//Console.WriteLine ("Entity move: dx:{0:0.##} dy:{1:0.##} dz:{2:0.##}", dx/32.0, dy/32.0, dz/32.0);
 					}
 					break;
@@ -552,7 +547,15 @@ namespace BrainBot
 						"Update health:{0} food:{1} saturation:{2}",
 						this.player.health, this.player.food, this.player.saturation);
 					if (this.player.health < 1) {
-						this.SendPacket (new object[]{(byte)PacketID.Respawn,(int)this.dimension,(byte)this.difficulty,(byte)this.serverMode,this.worldHeight,this.levelType});
+						this.SendPacket (new object[] {
+							(byte)PacketID.Respawn,
+							(int)this.dimension,
+							(byte)this.difficulty,
+							(byte)this.serverMode,
+							this.worldHeight,
+							this.levelType
+						}
+						);
 					}
 					break;
 				case PacketID.UseBed:
@@ -592,15 +595,19 @@ namespace BrainBot
 					readShort ();
 					break;
 				case PacketID.MapChunks:
-					readInt ();
-					readInt ();
-					readBool ();
-					readShort ();
-					readShort ();
-					int size = readInt ();
-					readInt ();
-					readBytes (size);
-					Console.WriteLine ("Chunk uploaded size:{0}", size);
+					{
+						int x = readInt ();
+						int z = readInt ();
+						bool ground = readBool ();
+						short primarymask = readShort ();
+						short addmask = readShort ();
+						int size = readInt ();
+						readInt ();
+						byte[] chunk = readBytes (size);
+						this.map.loadChunk (x, z, chunk);
+						Console.WriteLine (
+						"Chunk uploaded[{4};{5}] size:{0} ground:{1} mask:{2} mask:{3}", size,ground,Convert.ToString(primarymask,2),Convert.ToString(addmask,2),x,z);
+				}
 					break;
 				case PacketID.MultiBlockChange:
 					readInt ();
@@ -714,7 +721,7 @@ namespace BrainBot
 					string line2 = readString ();
 					string line3 = readString ();
 					string line4 = readString ();
-					Console.WriteLine ("Update sign:{0} {1} {2} {3}", line1, line2, line3, line4);
+					//Console.WriteLine ("Update sign:{0} {1} {2} {3}", line1, line2, line3, line4);
 					break;
 				default:
 					Console.WriteLine ("Unknown response: {0} ", Convert.ToString ((byte)packetID, 16));
