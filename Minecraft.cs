@@ -402,8 +402,12 @@ namespace BrainBot
 								map.Remove (result);
 							}
 						}
+						Console.WriteLine (
+						"Need to {0} the chunk [{1};{2}]",
+						mode ? "initialize" : "unload",
+						chunk.position.z,
+						chunk.position.y);
 					}
-				//Console.WriteLine ("Need to {0} the chunk X:{1} Y{2}", mode ? "initialize" : "unload", x6, y6);
 					break;
 				case PacketID.PlayerListItem:
 					string name = clearString (readString ());
@@ -468,7 +472,7 @@ namespace BrainBot
 					sbyte dz = (sbyte)readByte ();
 					if (entities.ContainsKey(entityID) && entities[entityID].GetType()==typeof(OtherPlayer))
 					{
-						Console.WriteLine ("Entity move: dx:{0:0.##} dy:{1:0.##} dz:{2:0.##}", dx/32.0, dy/32.0, dz/32.0);
+						//Console.WriteLine ("Entity move: dx:{0:0.##} dy:{1:0.##} dz:{2:0.##}", dx/32.0, dy/32.0, dz/32.0);
 					}
 					break;
 				case PacketID.EntityLook:

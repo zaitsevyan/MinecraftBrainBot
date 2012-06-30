@@ -51,6 +51,7 @@
     <Compile Include="Armor.cs" />
     <Compile Include="DroppedItem.cs" />
     <Compile Include="Chunk.cs" />
+    <Compile Include="Map.cs" />
   </ItemGroup>
   <Import Project="$(MSBuildBinPath)\Microsoft.CSharp.targets" />
 </Project>
